@@ -1,0 +1,97 @@
+trigger:
+- '*'
+
+variables:
+  buildConfiguration: 'Release'
+  releaseBranchName: 'release'
+
+stages:
+- stage: 'Build'
+  displayName: 'Build the web application'
+  jobs: 
+  - job: 'Build'
+    displayName: 'Build job'
+    pool:
+      vmImage: 'ubuntu-latest'
+
+    variables:
+      wwwrootDir: 'Tailspin.SpaceGame.Web/wwwroot'
+      dotnetSdkVersion: '7.x'
+
+    steps:
+    - task: UseDotNet@2
+      displayName: 'Use .NET SDK $(dotnetSdkVersion)'
+      inputs:
+        version: '$(dotnetSdkVersion)'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Publish the project - $(buildConfiguration)'
+      inputs:
+        command: 'publish'
+        projects: '**/*.csproj'
+        publishWebProjects: false
+        arguments: '--no-build --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/$(buildConfiguration)'
+        zipAfterPublish: true
+
+    - publish: '$(Build.ArtifactStagingDirectory)'
+      artifact: drop
+
+- stage: 'Development'
+  displayName: 'Deploy to the Development environment'
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+    - deployment: Deploy
+      pool: self-hosted
+      environment: development
+      #variables:
+        #- group: ''
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: current
+                artifact: drop
+              - script: |
+                  echo O deploy em Development foi feito com sucesso
+                displayName: 'Deploy to the Development'
+
+- stage: 'Staging'
+  displayName: 'Deploy to the Staging environment'
+  dependsOn: Development
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/stage')
+  jobs:
+    - deployment: Deploy
+      pool: self-hosted
+      environment: staging
+      #variables:
+        #- group: ''
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: current
+                artifact: drop
+              - script: |
+                  echo O deploy em Staging foi feito com sucesso
+                displayName: 'Deploy to the Staging'
+
+- stage: 'Production'
+  displayName: 'Deploy to the Production environment'
+  dependsOn: Staging
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
+  jobs:
+    - deployment: Deploy
+      pool: self-hosted
+      environment: production
+      #variables:
+        #- group: ''
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - download: current
+                artifact: drop
+              - script: |
+                  echo O deploy em Production foi feito com sucesso
+                displayName: 'Deploy to the Production'

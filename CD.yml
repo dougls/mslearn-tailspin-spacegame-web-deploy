@@ -1,0 +1,67 @@
+trigger:
+  - main
+
+variables:
+  buildConfiguration: 'Release'
+  releaseBranchName: 'release'
+  dotnetSdkVersion: '6.x'
+  wwwrootDir: 'Tailspin.SpaceGame.Web/wwwroot'
+
+stages:
+  - stage: 'Build'
+    displayName: 'Build'
+    jobs:
+    - job: 'Build'
+      displayName: 'Build Job'
+      pool: 
+        vmImage: ubuntu-latest
+
+      steps:
+      - task: UseDotNet@2
+        displayName: 'Use .NET SDK $(dotnetSdkVersion)'
+        inputs:
+          packageType: 'sdk'
+          version: '$(dotnetSdkVersion)'
+
+      - task: Npm@1
+        displayName: 'Run npm install'
+        inputs:
+          command: 'install'
+          
+      - script: './node_modules/.bin/node-sass $(wwwrootDir) --output $(wwwrootDir)'
+
+      - script: 'echo "$(Build.DefinitionName), $(Build.BuildId), $(build.BuildNumber)" > buildinfo.txt'
+        workingDirectory: $(wwwrootDir)
+
+      - task: DotNetCoreCLI@2
+        displayName: 'Restore project'
+        inputs:
+          command: 'restore'
+          projects: '**/*.csproj'
+
+      - task: DotNetCoreCLI@2
+        displayName: 'Build project'
+        inputs:
+          command: 'build'
+          arguments: '--no-restore --configuration $(buildConfiguration)'
+          projects: '**/*.csproj'
+
+      - task: DotNetCoreCLI@2
+        displayName: 'Publish project'
+        inputs:
+          command: 'publish'
+          projects: '**/*.csproj'
+          publishWebProjects: false
+          arguments: '--no-build --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/$(buildConfiguration)'
+          zipAfterPublish: true
+
+      - publish: '$(Build.ArtifactStagingDirectory)'
+        artifact: drop
+      
+      - download: current
+        artifact: drop
+        
+      - script: |
+          echo o deploy em Produção foi executado com sucesso
+        displayName: 'Deploy em Produção'
+
